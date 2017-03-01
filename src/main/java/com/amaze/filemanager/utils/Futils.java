@@ -52,6 +52,7 @@ import android.support.v4.provider.DocumentFile;
 import android.support.v7.widget.AppCompatButton;
 import android.text.TextUtils;
 import android.view.View;
+import android.util.Log;
 import android.widget.CheckBox;
 import android.widget.Toast;
 
@@ -370,6 +371,7 @@ public class Futils {
     }
 
     public void openunknown(File f, Context c, boolean forcechooser) {
+        Log.d( "Ceph openunknown", "File name " + f.toString() );
         Intent intent = new Intent();
         intent.setAction(android.content.Intent.ACTION_VIEW);
 
@@ -393,6 +395,7 @@ public class Futils {
     }
 
     public void openunknown(DocumentFile f, Context c, boolean forcechooser) {
+        Log.d( "Ceph openunknown", "DocumentFile name " + f.toString() );
         Intent intent = new Intent();
         intent.setAction(Intent.ACTION_VIEW);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -504,6 +507,7 @@ public class Futils {
     }
 
     public void openWith(final File f,final Context c) {
+        Log.d( "Ceph openWith", "File name " + f.toString() );
         MaterialDialog.Builder a=new MaterialDialog.Builder(c);
         a.title(c.getResources().getString(R.string.openas));
         String[] items=new String[]{c.getResources().getString(R.string.text),c.getResources().getString(R.string.image),c.getResources().getString(R.string.video),c.getResources().getString(R.string.audio),c.getResources().getString(R.string.database),c.getResources().getString(R.string.other)};
@@ -552,6 +556,7 @@ public class Futils {
     }
 
     public void openWith(final DocumentFile f,final Context c) {
+        Log.d( "Ceph openWith", "DocumentFile name " + f.toString() );
         MaterialDialog.Builder a=new MaterialDialog.Builder(c);
         a.title(c.getResources().getString(R.string.openas));
         String[] items=new String[]{c.getResources().getString(R.string.text),c.getResources().getString(R.string.image),c.getResources().getString(R.string.video),c.getResources().getString(R.string.audio),c.getResources().getString(R.string.database),c.getResources().getString(R.string.other)};

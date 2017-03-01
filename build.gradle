@@ -19,6 +19,10 @@ android {
     compileSdkVersion 25
     buildToolsVersion '23.0.3'
 
+    dexOptions {
+        jumboMode = true
+    }
+
     packagingOptions {
         exclude 'proguard-project.txt'
         exclude 'project.properties'
@@ -102,7 +106,7 @@ dependencies {
     compile 'com.afollestad.material-dialogs:core:0.9.2.3'
     compile 'com.github.PhilJay:MPAndroidChart:v3.0.1'
     //FTP Server
-//        compile 'org.apache.mina:mina-core:2.0.13'
+    //    compile 'org.apache.mina:mina-core:2.0.13'
     //    compile 'org.apache.ftpserver:ftpserver-core:1.0.6'
     //    compile 'org.apache.ftpserver:ftplet-api:1.0.6'
 
@@ -126,6 +130,10 @@ dependencies {
     //compile 'com.jcraft:jsch:0.1.53'
     compile 'com.android.volley:volley:1.0.0'
     compile 'eu.chainfire:libsuperuser:1.0.0.+'
+
+    compile 'com.amazonaws:aws-android-sdk-core:2.2.+'
+    compile 'com.amazonaws:aws-android-sdk-s3:2.2.+'
+    compile 'com.amazonaws:aws-android-sdk-ddb:2.2.+'
 }
 
 def Properties props = new Properties()

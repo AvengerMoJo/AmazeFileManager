@@ -11,14 +11,15 @@ public enum OpenMode {
     UNKNOWN,
     FILE,
     SMB,
-
     /**
      * Custom file types like apk/images/downloads (which don't have a defined path)
      */
     CUSTOM,
 
     ROOT,
-    OTG;
+    OTG,
+    // AvengerMoJo add ceph type 
+    CEPH;
 
     /**
      * Get open mode based on the id assigned

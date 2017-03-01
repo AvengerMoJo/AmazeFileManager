@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Build;
 import android.preference.PreferenceManager;
 import android.support.v4.provider.DocumentFile;
+import android.util.Log;
 
 import com.amaze.filemanager.exceptions.RootNotPermittedException;
 import com.amaze.filemanager.utils.Futils;
@@ -38,17 +39,24 @@ public class HFile {
 
     public HFile(OpenMode mode, String path, String name, boolean isDirectory) {
         this.mode = mode;
+        Log.d( "Ceph HFile",  "Show file:"+ this.path + " mode  = " + mode );
         if (path.startsWith("smb://") || isSmb()) {
             if(!isDirectory)this.path = path + name;
             else if(!name.endsWith("/")) this.path=path+name+"/";
             else this.path=path+name;
-        } else this.path = path + "/" + name;
+        } else if(path.startsWith("ceph://") || isCeph()) { 
+            this.path = path + "/" + name;
+        } else  this.path = path + "/" + name;
     }
+
     public void generateMode(Context context){
+        Log.d( "Ceph HFile",  "generateMode: path->"+ this.path + " mode->" + this.mode );
         if (path.startsWith("smb://")) {
             mode = OpenMode.SMB;
         } else if (path.startsWith("otg:/")) {
             mode = OpenMode.OTG;
+        } else if (path.startsWith("ceph://")) {
+            mode = OpenMode.CEPH;
         } else if (isCustomPath()) {
             mode = OpenMode.CUSTOM;
         }else {
@@ -92,6 +100,9 @@ public class HFile {
     }
     public boolean isSmb(){
         return mode==OpenMode.SMB;
+    }
+    public boolean isCeph(){
+        return mode==OpenMode.CEPH;
     }
 
     public boolean isOtgFile() {
@@ -199,6 +210,12 @@ public class HFile {
         } catch (MalformedURLException e) {
             return null;
         }
+    }
+    public String[] getCephFile() {
+        //AvengerMoJo
+        //
+        Log.d( "Ceph HFile",  "getCephFile: ..... add me " );
+        return null;
     }
     public boolean isCustomPath(){
         if(path.equals("0") ||
@@ -490,7 +507,7 @@ public class HFile {
      * @return true if file; other wise false
      */
     public boolean isSimpleFile(){
-        if(!isSmb() && !isOtgFile() && !isCustomPath()
+        if(!isSmb() && !isOtgFile() && !isCeph() && !isCustomPath()
                 && !android.util.Patterns.EMAIL_ADDRESS.matcher(path).matches()){
             if(!new File(path).isDirectory())return true;
         }

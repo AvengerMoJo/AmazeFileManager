@@ -69,6 +69,7 @@ import com.afollestad.materialdialogs.MaterialDialog;
 import com.amaze.filemanager.R;
 import com.amaze.filemanager.activities.BaseActivity;
 import com.amaze.filemanager.activities.MainActivity;
+import com.amaze.filemanager.activities.MainActivity.*;
 import com.amaze.filemanager.adapters.Recycleradapter;
 import com.amaze.filemanager.database.Tab;
 import com.amaze.filemanager.database.TabHandler;
@@ -76,6 +77,8 @@ import com.amaze.filemanager.filesystem.BaseFile;
 import com.amaze.filemanager.filesystem.HFile;
 import com.amaze.filemanager.filesystem.MediaStoreHack;
 import com.amaze.filemanager.filesystem.RootHelper;
+import com.amaze.filemanager.services.cephservice.CephService;
+import com.amaze.filemanager.services.cephservice.CephObject;
 import com.amaze.filemanager.services.asynctasks.LoadList;
 import com.amaze.filemanager.ui.Layoutelements;
 import com.amaze.filemanager.ui.icons.IconHolder;
@@ -102,6 +105,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+
+import java.net.URL;
+import android.net.Uri;
+
 
 import jcifs.smb.SmbException;
 import jcifs.smb.SmbFile;
@@ -135,6 +142,7 @@ public class Main extends android.support.v4.app.Fragment {
     public SwipeRefreshLayout mSwipeRefreshLayout;
     public int file_count, folder_count, columns;
     public String smbPath;
+    public String cephPath;
     public ArrayList<BaseFile> searchHelper = new ArrayList<>();
     public Resources res;
     HashMap<String, Bundle> scrolls = new HashMap<String, Bundle>();
@@ -299,6 +307,9 @@ public class Main extends android.support.v4.app.Fragment {
         DARK_IMAGE = new BitmapDrawable(res, BitmapFactory.decodeResource(res, R.drawable.ic_doc_image_dark));
         DARK_VIDEO = new BitmapDrawable(res, BitmapFactory.decodeResource(res, R.drawable.ic_doc_video_dark));
         this.setRetainInstance(false);
+
+        // AvengerMoJo debug
+        Log.d( "Ceph-fragmentMain", "onActivityCreated Trying file open with new HFile :" + CURRENT_PATH );
         f = new HFile(OpenMode.UNKNOWN, CURRENT_PATH);
         f.generateMode(getActivity());
         MAIN_ACTIVITY.initiatebbar();
@@ -347,10 +358,14 @@ public class Main extends android.support.v4.app.Fragment {
             }
 
         });
+        Log.d( "Ceph-fragmentMain", "main ui list :" + CURRENT_PATH );
         if (savedInstanceState == null) {
-            loadlist(CURRENT_PATH, false, openMode);
+            Log.d( "Ceph-fragmentMain", "main ui loadlist savedInstanceState null false openMode :" + openMode  );
+            Log.d( "Ceph-fragmentMain", "f.openMode :" + f.getMode() );
+            loadlist(CURRENT_PATH, false, f.getMode() );
 
         } else {
+            Log.d( "Ceph-fragmentMain", "main ui loadlist savedInstanceState not null"); 
             if (IS_LIST)
                 retrieveFromSavedInstance(savedInstanceState);
         }
@@ -626,6 +641,7 @@ public class Main extends android.support.v4.app.Fragment {
         public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
             computeScroll();
             ArrayList<Integer> plist = adapter.getCheckedItemPositions();
+            Log.d( "Ceph-fragmentMain", "onActionItemClicked " + plist.toString() );
             switch (item.getItemId()) {
                 case R.id.openmulti:
                     if (Build.VERSION.SDK_INT >= 16) {
@@ -818,6 +834,9 @@ public class Main extends android.support.v4.app.Fragment {
      * @param imageView the check {@link RoundedImageView} that is to be animated
      */
     public void onListItemClicked(int position, ImageView imageView) {
+
+        // this is where the Main UI being called AvengerMoJo
+        Log.d( "Ceph-fragmentMain",  "onListItemClicked " + position);
         if (position >= LIST_ELEMENTS.size()) return;
 
         if (results) {
@@ -845,8 +864,14 @@ public class Main extends android.support.v4.app.Fragment {
         if (selection == true) {
             if (!LIST_ELEMENTS.get(position).getSize().equals(goback)) {
                 // the first {goback} item if back navigation is enabled
+                //
+                // AvengerMoJo ... ceph need to check this later as well 
+                Log.d( "Ceph-fragmentMain", "selection it is not goback -> adapter.toggleChecked " + position );  
                 adapter.toggleChecked(position, imageView);
+
             } else {
+                Log.d( "Ceph-fragmentMain", "selection it is goback mActionMode.finish" + position );  
+                adapter.toggleChecked(position, imageView);
                 selection = false;
                 if (mActionMode != null)
                     mActionMode.finish();
@@ -855,12 +880,13 @@ public class Main extends android.support.v4.app.Fragment {
 
         } else {
             if (!LIST_ELEMENTS.get(position).getSize().equals(goback)) {
-
+                Log.d( "Ceph-fragmentMain", "Not selection it is not goback " + position );  
                 // hiding search view if visible
                 if (MainActivity.isSearchViewEnabled)   MAIN_ACTIVITY.hideSearchView();
 
                 String path;
                 Layoutelements l = LIST_ELEMENTS.get(position);
+                Log.d( "Ceph-fragmentMain", "LIST_ELEMENTS :" + l );  
                 if (!l.hasSymlink()) {
 
                     path = l.getDesc();
@@ -872,6 +898,7 @@ public class Main extends android.support.v4.app.Fragment {
                     computeScroll();
                     loadlist(path, false, openMode);
                 } else {
+                    Log.d( "Ceph-fragmentMain", "is not a dir and file " );  
                     if (l.getMode() == OpenMode.SMB) {
                         try {
                             SmbFile smbFile = new SmbFile(l.getDesc());
@@ -880,14 +907,14 @@ public class Main extends android.support.v4.app.Fragment {
                             e.printStackTrace();
                         }
                     } else if (l.getMode() == OpenMode.OTG) {
-
                         utils.openFile(RootHelper.getDocumentFile(l.getDesc(), getContext(), false),
                                 (MainActivity) getActivity());
-                    }
-                    else if (MAIN_ACTIVITY.mReturnIntent) {
+                    } else if (l.getMode() == OpenMode.CEPH ) {
+                        Log.d( "Ceph-fragmentMain", "getMode = CEPH " + l.getTitle() );  
+                        openCephData(l);
+                    } else if (MAIN_ACTIVITY.mReturnIntent) {
                         returnIntentResults(new File(l.getDesc()));
                     } else {
-
                         utils.openFile(new File(l.getDesc()), (MainActivity) getActivity());
                     }
                     DataUtils.addHistoryFile(l.getDesc());
@@ -930,6 +957,11 @@ public class Main extends android.support.v4.app.Fragment {
     LoadList loadList;
 
     public void loadlist(String path, boolean back, OpenMode openMode) {
+
+        // loading the main ui with entrys AvengerMoJo 
+        //
+        Log.d( "Ceph-fragmentMain", "loadlist :" + path + " back: " + back +  " Mode :" + openMode);
+
         if (mActionMode != null) {
             mActionMode.finish();
         }
@@ -1080,6 +1112,7 @@ public class Main extends android.support.v4.app.Fragment {
                 } catch (Exception e) {
                 }
             } else {//Toast.makeText(getActivity(),res.getString(R.string.error),Toast.LENGTH_LONG).show();
+                Log.d("Ceph-fragmentMain", "createView " + " home is " + home + " cur_path " + CURRENT_PATH ); 
                 loadlist(home, true, OpenMode.FILE);
             }
         } catch (Exception e) {
@@ -1141,8 +1174,12 @@ public class Main extends android.support.v4.app.Fragment {
     }
 
     public void goBack() {
+        Log.d("Ceph-fragmentMain", "goBack openMode" + openMode + " home is " + home + " cur_path " + CURRENT_PATH ); 
         if (openMode == OpenMode.CUSTOM) {
             loadlist(home, false, OpenMode.FILE);
+            return;
+        } else if (openMode == OpenMode.CEPH) {
+            loadlist(CURRENT_PATH, true, OpenMode.CEPH);
             return;
         }
 
@@ -1226,9 +1263,12 @@ public class Main extends android.support.v4.app.Fragment {
     }
 
     public void goBackItemClick() {
+        Log.d("Ceph-fragmentMain", "goBackItemClick openMode" + openMode + " home is " + home + " cur_path " + CURRENT_PATH ); 
         if (openMode == OpenMode.CUSTOM) {
             loadlist(home, false, OpenMode.FILE);
             return;
+        } else if ( openMode == OpenMode.CEPH) {
+            loadlist(home, true, OpenMode.CEPH);
         }
         File f = new File(CURRENT_PATH);
         if (!results) {
@@ -1297,6 +1337,46 @@ public class Main extends android.support.v4.app.Fragment {
                     folder : Icons.loadMimeIcon(layoutelements.getDesc(), !IS_LIST, res);
             layoutelements.setImageId(iconDrawable);
         }
+    }
+
+    public ArrayList<Layoutelements> addCephPath(String path) {
+        Log.d( "Ceph-fragmentMain", "addCephPath:" + path);
+        ArrayList<Layoutelements> a = new ArrayList<Layoutelements>();
+        CephObject[] files = null;
+
+        Log.d( "Ceph-fragmentMain", "MAIN_ACTIVITY :" + MAIN_ACTIVITY );
+        //CephObject files[] = MAIN_ACTIVITY.requestCephObject(path);
+        if( MAIN_ACTIVITY != null ) { 
+            files = ((MainActivity)MAIN_ACTIVITY).getCephObject(path);
+        }
+        Log.d( "Ceph-fragmentMain", "addCephPath how many file? :" + files.length );
+        for (int i = 0; i < files.length; i++) {
+            if( files[i] != null ) {
+                Log.d( "Ceph-fragmentMain", "addCephPath :" + files[i].getName() );
+                String name = files[i].getName();
+                if (files[i].isBucket()) {
+                    Log.d( "Ceph-fragmentMain", "addCephPath : isBucket" );
+                    folder_count++;
+                    Layoutelements layoutelements = new Layoutelements(folder, name, files[i].getPath(),
+                            "", "", "", 0, false, files[i].lastModified() + "", true);
+                    layoutelements.setMode(OpenMode.CEPH);
+                    searchHelper.add(layoutelements.generateBaseFile());
+                    a.add(layoutelements);
+                } else {
+                    Log.d( "Ceph-fragmentMain", "addCephPath : not isBucket" );
+                    file_count++;
+                    Layoutelements layoutelements = new Layoutelements(
+                            Icons.loadMimeIcon(files[i].getPath(), !IS_LIST, res), name,
+                            files[i].getPath(), "", "", Formatter.formatFileSize(getContext(),
+                            files[i].length()), files[i].length(), false,
+                            files[i].lastModified() + "", false);
+                    layoutelements.setMode(OpenMode.CEPH);
+                    searchHelper.add(layoutelements.generateBaseFile());
+                    a.add(layoutelements);
+                }
+            }
+        }
+        return a;
     }
 
     public ArrayList<Layoutelements> addToSmb(SmbFile[] mFile, String path) throws SmbException {
@@ -1461,6 +1541,40 @@ public class Main extends android.support.v4.app.Fragment {
                 mFullPath.setText(MAIN_ACTIVITY.getString(R.string.searchresults));
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    private void openCephData(final Layoutelements l) {
+        //s = Streamer.getInstance();
+        new Thread() {
+            public void run() {
+                try {
+                    //s.setStreamSrc(url, si);
+                    getActivity().runOnUiThread(new Runnable() {
+                        public void run() {
+                            try {
+                                //Uri uri = Uri.parse(Streamer.URL + Uri.fromFile(new File(Uri.parse(smbFile.getPath()).getPath())).getEncodedPath());
+                                URL url = MAIN_ACTIVITY.getObjectURL( l.getTitle() );
+                                Log.d( "Ceph-fragmentMain", "openCephData url = " + url ) ;
+
+                                Intent i = new Intent(Intent.ACTION_VIEW);
+                                i.setDataAndType(Uri.parse(url.getPath()), "video/mp4");
+                                PackageManager packageManager = getActivity().getPackageManager();
+                                List<ResolveInfo> resInfos = packageManager.queryIntentActivities(i, 0);
+                                if (resInfos != null && resInfos.size() > 0)
+                                    startActivity(i);
+                                else
+                                    Toast.makeText(getActivity(), getString(R.string.smb_launch_error), Toast.LENGTH_SHORT).show();
+                            } catch (ActivityNotFoundException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
+
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }.start();
     }
 
     private void launch(final SmbFile smbFile, final long si) {

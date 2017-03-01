@@ -5,6 +5,8 @@ import com.amaze.filemanager.ui.drawer.Item;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Arrays;
+
 
 /**
  * Created by arpitkh996 on 20-01-2016.
@@ -14,7 +16,7 @@ import java.util.List;
 public class DataUtils {
     public static ArrayList<String> hiddenfiles=new ArrayList<>(), gridfiles=new ArrayList<>(), listfiles=new ArrayList<>(),history=new ArrayList<>();
     public static List<String> storages=new ArrayList<>();
-    public static final String DRIVE = "drive", SMB = "smb", BOOKS = "books", HISTORY = "Table1", HIDDEN = "Table2", LIST = "list", GRID = "grid";
+    public static final String DRIVE = "drive", SMB = "smb", BOOKS = "books", HISTORY = "Table1", HIDDEN = "Table2", LIST = "list", GRID = "grid", CEPH = "ceph";
     public static final int DELETE = 0, COPY = 1, MOVE = 2, NEW_FOLDER = 3, RENAME = 4, NEW_FILE = 5, EXTRACT = 6, COMPRESS = 7;
     public static ArrayList<Item> list=new ArrayList<>();
     public static ArrayList<String[]> servers=new ArrayList<>(),books=new ArrayList<>(),accounts=new ArrayList<>();
@@ -96,6 +98,7 @@ public class DataUtils {
             accounts.add(i);
     }
     public static void addServer(String[] i){
+            System.out.println("Ceph DataUtils addServer :" +  Arrays.deepToString(i) );
             servers.add(i);
     }
     public static void addHiddenFile(String i)
@@ -122,6 +125,12 @@ public class DataUtils {
     public static void setServers(ArrayList<String[]> servers) {
         if(servers!=null)
         DataUtils.servers = servers;
+    }
+    public static void appendServers(ArrayList<String[]> servers) {
+        if(servers!=null)
+            for ( String[] s : servers ) {
+                DataUtils.servers.add(s);
+            }
     }
 
     public static void setBooks(ArrayList<String[]> books) {

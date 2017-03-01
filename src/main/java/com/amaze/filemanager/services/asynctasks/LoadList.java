@@ -24,6 +24,7 @@ import android.database.Cursor;
 import android.os.AsyncTask;
 import android.provider.MediaStore;
 import android.text.format.Formatter;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.amaze.filemanager.activities.BaseActivity;
@@ -87,18 +88,23 @@ public class LoadList extends AsyncTask<String, String, ArrayList<Layoutelements
     protected ArrayList<Layoutelements> doInBackground(String... params) {
         // params comes from the execute() call: params[0] is the url.
         ArrayList<Layoutelements> list = null;
+        HFile hFile = null;
         path = params[0];
         grid = ma.checkforpath(path);
         ma.folder_count = 0;
         ma.file_count = 0;
         if (openmode == OpenMode.UNKNOWN) {
-            HFile hFile = new HFile(OpenMode.UNKNOWN, path);
+            hFile = new HFile(OpenMode.UNKNOWN, path);
             hFile.generateMode(ma.getActivity());
             if (hFile.isLocal()) {
                 openmode = OpenMode.FILE;
             } else if (hFile.isSmb()) {
                 openmode = OpenMode.SMB;
                 ma.smbPath = path;
+            } else if (hFile.isCeph()) {
+                openmode = OpenMode.CEPH;
+                ma.cephPath = path;
+                Log.d( "Ceph LoadList" , "doInBackground ma.cephPath :" + path + " mode :" + openmode );
             } else if (hFile.isOtgFile()) {
                 openmode = OpenMode.OTG;
             } else if (hFile.isCustomPath())
@@ -109,8 +115,25 @@ public class LoadList extends AsyncTask<String, String, ArrayList<Layoutelements
         }
 
         switch (openmode) {
+            case CEPH:
+                Log.d( "Ceph LoadList" , "doInBackground ma.cephPath :" + path + " mode :" + openmode );
+                if( back ) {
+                    String new_path = path.substring(0, path.lastIndexOf("/"));
+                    if( new_path == "ceph:/" ) { 
+                        hFile = new HFile(OpenMode.CEPH, path);
+                        list = ma.addCephPath( path );
+                    } else {
+                        hFile = new HFile(OpenMode.CEPH, new_path);
+                        list = ma.addCephPath( new_path );
+                    }
+                } else {
+                    hFile = new HFile(OpenMode.CEPH, path);
+                    list = ma.addCephPath( path );
+                }
+                openmode = OpenMode.CEPH;
+                break;
             case SMB:
-                HFile hFile = new HFile(OpenMode.SMB, path);
+                hFile = new HFile(OpenMode.SMB, path);
                 try {
                     SmbFile[] smbFile = hFile.getSmbFile(5000).listFiles();
                     list = ma.addToSmb(smbFile, path);

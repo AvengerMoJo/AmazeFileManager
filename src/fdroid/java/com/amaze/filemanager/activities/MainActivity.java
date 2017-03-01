@@ -19,6 +19,11 @@
 
 package com.amaze.filemanager.activities;
 
+// Bind service for CephService Listener
+import android.os.IBinder;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
@@ -99,6 +104,7 @@ import com.amaze.filemanager.filesystem.FileUtil;
 import com.amaze.filemanager.filesystem.HFile;
 import com.amaze.filemanager.filesystem.RootHelper;
 import com.amaze.filemanager.fragments.AppsList;
+import com.amaze.filemanager.fragments.CephFragment;
 import com.amaze.filemanager.fragments.FTPServerFragment;
 import com.amaze.filemanager.fragments.Main;
 import com.amaze.filemanager.fragments.ProcessViewer;
@@ -110,6 +116,10 @@ import com.amaze.filemanager.services.CopyService;
 import com.amaze.filemanager.services.DeleteTask;
 import com.amaze.filemanager.services.asynctasks.CopyFileCheck;
 import com.amaze.filemanager.services.asynctasks.MoveFiles;
+import com.amaze.filemanager.services.cephservice.CephService;
+import com.amaze.filemanager.services.cephservice.CephObject;
+import com.amaze.filemanager.services.cephservice.CephService.CephServiceBinder;
+import com.amaze.filemanager.services.cephservice.CephService.CephConnectionListener;
 import com.amaze.filemanager.ui.dialogs.RenameBookmark;
 import com.amaze.filemanager.ui.dialogs.RenameBookmark.BookmarkCallback;
 import com.amaze.filemanager.ui.dialogs.SmbConnectDialog;
@@ -147,9 +157,15 @@ import java.util.regex.Pattern;
 
 import eu.chainfire.libsuperuser.Shell;
 
+import java.net.URL;
+import com.amazonaws.services.s3.model.Bucket;
+//import com.amazonaws.services.s3.model.ObjectListing;
+//import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 public class MainActivity extends BaseActivity implements OnRequestPermissionsResultCallback,
         SmbConnectionListener, DataChangeListener, BookmarkCallback,
+        CephConnectionListener,
         SearchAsyncHelper.HelperCallbacks {
 
     final Pattern DIR_SEPARATOR = Pattern.compile("/");
@@ -248,6 +264,9 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
     public static Handler handler;
     private static HandlerThread handlerThread;
 
+    private CephServiceConnection cephServiceConnection = new CephServiceConnection();
+    private CephService cephService = null;
+
     /**
      * Called when the activity is first created.
      */
@@ -274,6 +293,7 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         grid.initializeTable(DataUtils.BOOKS, 1);
         grid.initializeTable(DataUtils.DRIVE, 1);
         grid.initializeTable(DataUtils.SMB, 1);
+        grid.initializeTable(DataUtils.CEPH, 1);
 
         if (!Sp.getBoolean("booksadded", false)) {
             grid.make(DataUtils.BOOKS);
@@ -325,6 +345,9 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
                     zippath = uri.toString();
                 }
             }
+            Log.d( "Ceph fdroid MainActivity", " binding ceph to link service" );
+            bindService(new Intent(this, CephService.class), cephServiceConnection, BIND_AUTO_CREATE);
+
         } catch (Exception e) {
 
         }
@@ -653,6 +676,7 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         List<String> val = getStorageDirectories();
         ArrayList<String[]> books = new ArrayList<>();
         ArrayList<String[]> Servers = new ArrayList<>();
+        ArrayList<String[]> ceph_servers = new ArrayList<>();
         ArrayList<String[]> accounts = new ArrayList<>();
         storage_count = 0;
         for (String file : val) {
@@ -679,12 +703,28 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         DataUtils.setStorages(val);
         list.add(new SectionItem());
         try {
-            for (String[] file : grid.readTableSecondary(DataUtils.SMB))
+            for (String[] file : grid.readTableSecondary(DataUtils.SMB)) {
                 Servers.add(file);
+                Log.d("Ceph fdroid MainActivity", "DataUtils SMB file add " + file );
+            }
             DataUtils.setServers(Servers);
             if (Servers.size() > 0) {
                 Collections.sort(Servers, new BookSorter());
                 for (String[] file : Servers)
+                    list.add(new EntryItem(file[0], file[1], ContextCompat.getDrawable(this, R.drawable
+                            .ic_settings_remote_white_48dp)));
+                list.add(new SectionItem());
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        try {
+            for (String[] file : grid.readTableSecondary(DataUtils.CEPH))
+                ceph_servers.add(file);
+            DataUtils.appendServers(ceph_servers);
+            if (ceph_servers.size() > 0) {
+                Collections.sort(ceph_servers, new BookSorter());
+                for (String[] file : ceph_servers)
                     list.add(new EntryItem(file[0], file[1], ContextCompat.getDrawable(this, R.drawable
                             .ic_settings_remote_white_48dp)));
                 list.add(new SectionItem());
@@ -761,6 +801,7 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
     }
 
     public void goToMain(String path) {
+        Log.d( "Ceph fdroid MainActivity" , "goToMain the real main ui loading " + path ); 
         android.support.v4.app.FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
         //title.setText(R.string.app_name);
         TabFragment tabFragment = new TabFragment();
@@ -787,9 +828,13 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
     }
 
     public void selectItem(final int i) {
+        // where the Drawer get selected in Menu AvengerMoJo 
         ArrayList<Item> list = DataUtils.getList();
+        Log.d( "Ceph fdroid MainActivity", "selectItem i =" + i + " : " +  list );
+
         if (!list.get(i).isSection())
             if ((select == null || select >= list.size())) {
+                Log.d("Ceph fdroid MainActivity", "select null ... EntryItem getPath = " + ((EntryItem) list.get(i)).getPath() );
 
                 TabFragment tabFragment = new TabFragment();
                 Bundle a = new Bundle();
@@ -809,6 +854,7 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
                 floatingActionButton.setVisibility(View.VISIBLE);
                 floatingActionButton.showMenuButton(true);
             } else {
+                Log.d("Ceph fdroid MainActivity", "EntryItem getPath = " + ((EntryItem) list.get(i)).getPath() );
                 pending_path = ((EntryItem) list.get(i)).getPath();
 
                 select = i;
@@ -1907,6 +1953,28 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         });
         //getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor((currentTab==1 ? skinTwo : skin))));
 
+        /* AvengerMoJo 
+         * ceph menu items added
+         */
+        View cephButton = findViewById(R.id.cephbutton);
+        if (getAppTheme().equals(AppTheme.DARK)) {
+            cephButton.setBackgroundResource(R.drawable.safr_ripple_black);
+            ((ImageView) cephButton.findViewById(R.id.cephicon)).setImageResource(R.drawable.ic_ceph_dark);
+            ((TextView) cephButton.findViewById(R.id.cephtext)).setTextColor(getResources().getColor(android.R.color.white));
+        }
+        cephButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                android.support.v4.app.FragmentTransaction transaction2 = getSupportFragmentManager().beginTransaction();
+                transaction2.replace(R.id.content_frame, new CephFragment());
+                findViewById(R.id.lin).animate().translationY(0).setInterpolator(new DecelerateInterpolator(2)).start();
+                pending_fragmentTransaction = transaction2;
+                if (!isDrawerLocked) mDrawerLayout.closeDrawer(mDrawerLinear);
+                else onDrawerClosed();
+                select = -2;
+                adapter.toggleChecked(false);
+            }
+        });
 
         // status bar0
         sdk = Build.VERSION.SDK_INT;
@@ -1961,6 +2029,48 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
 
         //    searchViewEditText.setTextColor(getResources().getColor(android.R.color.black));
         //     searchViewEditText.setHintTextColor(Color.parseColor(BaseActivity.accentSkin));
+    }
+    
+    public URL getObjectURL( String key ) {
+        Log.d( "Ceph fdroid MainActivity", "getObjectURL : " + key );
+        URL url = null;
+        if( cephService != null ) {
+            url = cephService.getObjectURL(key);
+        }
+        return url;
+    }
+
+    public CephObject[] getCephObject( String path ) {
+        Log.d( "Ceph fdroid MainActivity", "getCephObject : " + path );
+        int i = 0;
+        CephObject[] co_list=null;
+        if( cephService != null ) {
+            if( cephService.isRoot( path ) )  { 
+                Log.d( "Ceph fdroid MainActivity", "it is a root: " + path );
+                List<Bucket> root_bucket = cephService.getRootBucket();
+                if(root_bucket!= null ) {
+                    co_list = new CephObject[root_bucket.size()]; 
+                    i=0;
+                    for(Bucket next : root_bucket) {
+                        co_list[i++] = new CephObject( next.getName(), path + "/" + next.getName(), 0 , next.getCreationDate().getTime(), true  ); 
+                    }
+                }
+            } else {  // assume that is in bucket 
+                String temp = new String(path);
+                String bucket_name = temp.replaceFirst( cephService.getRoot(), "");  
+                Log.d( "Ceph fdroid MainActivity", "it is a bucket : " + bucket_name );
+                List<S3ObjectSummary> object_list = cephService.getObjectsListSummaryByBucket( bucket_name );
+                if( object_list != null ) { 
+                    co_list = new CephObject[object_list.size()]; 
+                    i = 0;
+                    for(S3ObjectSummary next : object_list) {
+                        co_list[i++] = new CephObject( next.getKey(), path + "/" + next.getKey(), next.getSize(), next.getLastModified().getTime(), false ); 
+                    }
+                }
+
+            }
+        }
+        return co_list;
     }
 
     /**
@@ -2374,6 +2484,7 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         }
         if (pending_path != null) {
             try {
+                Log.d( "Ceph fdroid MainActivity" , " onDrawerClosed where drawer action started after clicked  " + pending_path ); 
 
                 HFile hFile = new HFile(OpenMode.UNKNOWN, pending_path);
                 hFile.generateMode(this);
@@ -2388,7 +2499,9 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
                     return;
                 }
                 Main main = ((Main) m.getTab());
+                // this seem to be the smb and ceph should go 
                 if (main != null) main.loadlist(pending_path, false, OpenMode.UNKNOWN);
+                //if (main != null) main.loadlist(pending_path, false, hFile.getMode() );
             } catch (ClassCastException e) {
                 select = null;
                 goToMain("");
@@ -2552,6 +2665,36 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
         }
     }
 
+    @Override
+    public void addCeph(String name, String path, String port, String access_key, String secret_key) {
+        Log.d( "Ceph fdroid MainActivity", " addCeph name:" + name + " port:" + port  );
+        if ((DataUtils.containsServer(path)) == -1) {
+            DataUtils.addServer(new String[]{name, path, port, access_key, secret_key});
+            //mainActivity.refreshDrawer();
+            grid.addPath(name, path, DataUtils.CEPH, 1);
+            TabFragment fragment = getFragment();
+            if (fragment != null) {
+                Fragment fragment1 = fragment.getTab();
+                if (fragment1 != null) {
+                    final Main ma = (Main) fragment1;
+                    ma.loadlist(path, false, OpenMode.UNKNOWN);
+                }
+            }
+        }
+    }
+
+    public class CephServiceConnection implements ServiceConnection {
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            Log.d( "CephServiceConnection", "onServiceConnected binding cephService " );
+            cephService = ((CephServiceBinder)service).getService();
+            cephService.setConnectionListener(mainActivity);
+        }
+        public void onServiceDisconnected(ComponentName name) {
+            Log.d( "CephServiceConnection", "onServiceConnected unbinding cephService " );
+            //cephService.setConnectionListener(null);
+            //cephService = null;
+        }
+    }
 
     public void showSMBDialog(String name, String path, boolean edit) {
         if (path.length() > 0 && name.length() == 0) {
@@ -2681,4 +2824,5 @@ public class MainActivity extends BaseActivity implements OnRequestPermissionsRe
                 mainFragment.openMode, false, !mainFragment.IS_LIST);
         mainFragment.mSwipeRefreshLayout.setRefreshing(false);
     }
+
 }
