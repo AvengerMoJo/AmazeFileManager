@@ -41,7 +41,6 @@
     <application
         android:name=".utils.AppConfig"
         android:icon="@mipmap/ic_launcher"
-	android:roundIcon="@mipmap/ic_launcher_round"
         tools:replace="android:label"
         android:label="Amaze">
 
@@ -130,6 +129,11 @@
 			android:label = "Copying"
             >
 		</service>
+            <service
+            android:name="com.amazonaws.mobileconnectors.s3.transferutility.TransferService"
+            android:enabled="true" 
+            >
+        </service> 
 
         <service
             android:name="com.amaze.filemanager.services.ftpservice.FTPService"
@@ -162,6 +166,19 @@
                 <action android:name="com.amaze.filemanager.services.ftpservice.FTPReceiver.FTPSERVER_STOPPED" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name="com.amaze.filemanager.services.cephservice.CephService"
+            android:enabled="true"
+            android:exported="true" />
+        <receiver
+            android:name="com.amaze.filemanager.services.cephservice.CephReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.amaze.filemanager.services.cephservice.CephReceiver.ACTION_CONNECT_CEPHSERVER" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

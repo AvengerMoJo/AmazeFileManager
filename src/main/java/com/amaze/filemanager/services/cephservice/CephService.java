@@ -358,7 +358,7 @@ public class CephService extends Service implements Runnable {
             //StrictMode.setThreadPolicy(policy);
 
             // conn.setObjectAcl(b_name, key, CannedAccessControlList.PublicRead);
-            String region = conn.getRegionName();
+            //String region = conn.getRegionName();
             Log.d("CephService", "conn.getRegionName() " + region ); 
             Date expiration = new Date((new Date().getTime()) + 36000);
             GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(b_name, key);
