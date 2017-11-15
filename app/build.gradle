@@ -27,6 +27,7 @@ android {
         versionCode 63
         versionName "3.2.1"
 
+        multiDexEnabled true
         vectorDrawables.useSupportLibrary = true;
     }
 
