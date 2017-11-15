@@ -29,6 +29,7 @@
     <string name="storage">Storage</string>
     <string name="apps">App Manager</string>
     <string name="ftp">FTP Server</string>
+    <string name="ceph">Ceph Server</string>
     <string name="setting">Settings</string>
     <string name="select">Select Item</string>
     <string name="pressagain">Press  again to exit</string>
@@ -301,6 +302,10 @@
         will look for occurrence otherwise.</string>
     <string name="start_ftp">Start</string>
     <string name="stop_ftp">Stop</string>
+    <string name="connect_ceph">Connect</string>
+    <string name="ceph_status_running">Ceph Connected</string>
+    <string name="ceph_status_not_running">Ceph Not connected</string>
+    <string name="ceph_no_wifi">Make sure you\'re connected to WiFi</string>
     <string name="ftp_status_running">Running</string>
     <string name="ftp_status_not_running">Not Running</string>
     <string name="ftp_no_wifi">Make sure you\'re connected to WiFi</string>
