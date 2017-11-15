@@ -103,6 +103,7 @@ import com.amaze.filemanager.filesystem.HybridFileParcelable;
 import com.amaze.filemanager.filesystem.PasteHelper;
 import com.amaze.filemanager.filesystem.RootHelper;
 import com.amaze.filemanager.fragments.AppsListFragment;
+import com.amaze.filemanager.fragments.CephFragment;
 import com.amaze.filemanager.fragments.CloudSheetFragment;
 import com.amaze.filemanager.fragments.CloudSheetFragment.CloudConnectionCallbacks;
 import com.amaze.filemanager.fragments.FTPServerFragment;
@@ -1902,6 +1903,24 @@ public class MainActivity extends ThemedActivity implements
             selectedStorage = SELECT_MINUS_2;
             adapter.toggleChecked(false);
         });
+
+        View cephButton = findViewById(R.id.cephbutton);
+        if (getAppTheme().equals(AppTheme.DARK)) {
+            cephButton.setBackgroundResource(R.drawable.safr_ripple_black);
+            ((ImageView) ftpButton.findViewById(R.id.cephicon)).setImageResource(R.drawable.ic_ceph_dark);
+            ((TextView) ftpButton.findViewById(R.id.cephtext)).setTextColor(Utils.getColor(this, android.R.color.white));
+        }
+        cephButton.setOnClickListener(v -> {
+            FragmentTransaction transaction2 = getSupportFragmentManager().beginTransaction();
+            transaction2.replace(R.id.content_frame, new CephFragment());
+            appBarLayout.animate().translationY(0).setInterpolator(new DecelerateInterpolator(2)).start();
+            pending_fragmentTransaction = transaction2;
+            if (!isDrawerLocked) mDrawerLayout.closeDrawer(mDrawerLinear);
+            else onDrawerClosed();
+            selectedStorage = SELECT_MINUS_2;
+            adapter.toggleChecked(false);
+        });
+
         //getSupportActionBar().setBackgroundDrawable(new ColorDrawable(Color.parseColor((currentTab==1 ? skinTwo : skin))));
 
         // status bar0
