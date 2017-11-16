@@ -300,12 +300,21 @@
     <string name="match_content">Match content</string>
     <string name="match_content_summary">If set, regular expression will be matched with entire file name,
         will look for occurrence otherwise.</string>
-    <string name="connect_ceph">Connect</string>
+    <string name="ceph_connect">Connect</string>
+    <string name="ceph_start">Connect Ceph</string>
+    <string name="ceph_stop">Stop Connect Ceph</string>
+    <string name="ceph_status_title">Status</string>
     <string name="ceph_status_running">Ceph Connected</string>
     <string name="ceph_status_not_running">Ceph Not connected</string>
     <string name="ceph_no_wifi">Make sure you\'re connected to WiFi</string>
-    <string name="start_ceph">Connect Ceph</string>
-    <string name="stop_ceph">Stop Connect Ceph</string>
+    <string name="ceph_address">Ceph Address</string>
+    <string name="ceph_login">Login</string>
+    <string name="ceph_port_change_success">Ceph port changed successfully</string>
+    <string name="ceph_address_change_success">Ceph address changed successfully</string>
+    <string name="ceph_port_edit_menu_title">Ceph port</string>
+    <string name="ceph_port">Port</string>
+    <string name="ceph_address_hint">IP or Hostname</string>
+
     <string name="start_ftp">Start</string>
     <string name="stop_ftp">Stop</string>
     <string name="ftp_status_running">Running</string>

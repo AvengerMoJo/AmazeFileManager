@@ -113,7 +113,7 @@
                 <Button
                     android:layout_width="match_parent"
                     android:layout_height="@dimen/material_generic_medium"
-                    android:text="@string/start_ftp"
+                    android:text="@string/ceph_start"
                     android:id="@+id/cephStartStopButton"
                     android:background="?android:attr/selectableItemBackground"
                     android:layout_marginBottom="@dimen/material_generic"
