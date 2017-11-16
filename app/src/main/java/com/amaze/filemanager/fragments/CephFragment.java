@@ -34,7 +34,7 @@ import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.amaze.filemanager.R;
 import com.amaze.filemanager.activities.MainActivity;
-// import com.amaze.filemanager.services.cephservice.CephService;
+import com.amaze.filemanager.asynchronous.cephservice.*;
 import com.amaze.filemanager.exceptions.CryptException;
 import com.amaze.filemanager.utils.color.ColorUsage;
 import com.amaze.filemanager.utils.files.CryptUtil;
@@ -116,7 +116,7 @@ public class CephFragment extends Fragment {
                         if( editText != null ) {
                             String name = editText.getText().toString();
                             int portNumber = Integer.parseInt(name);
-                            changeCephServerPort(portNumber);
+                            setCephServerPort(portNumber);
                             Toast.makeText(getActivity(), R.string.ceph_port_change_success,
                                 Toast.LENGTH_SHORT).show();
                         }
@@ -134,15 +134,18 @@ public class CephFragment extends Fragment {
                 loginDialogBuilder.customView(rootView, true);
                 loginDialogBuilder.title(getString(R.string.ceph_login));
 
-                if (passwordEditText.getText().toString().equals("")) {
-                    passwordTextInput.setError(getResources().getString(R.string.field_empty));
-                } else if (usernameEditText.getText().toString().equals("")) {
-                    usernameTextInput.setError(getResources().getString(R.string.field_empty));
-                } else { 
-                    // password and username field not empty, let's set them to preferences
-                    setUsername(usernameEditText.getText().toString());
-                    setPassword(passwordEditText.getText().toString());
-                }
+                loginDialogBuilder.onPositive((dialog, which) -> {
+
+                    if (passwordEditText.getText().toString().equals("")) {
+                        passwordTextInput.setError(getResources().getString(R.string.field_empty));
+                    } else if (usernameEditText.getText().toString().equals("")) {
+                        usernameTextInput.setError(getResources().getString(R.string.field_empty));
+                    } else { 
+                        // password and username field not empty, let's set them to preferences
+                        setUsername(usernameEditText.getText().toString());
+                        setPassword(passwordEditText.getText().toString());
+                    }
+                });
                 loginDialogBuilder.positiveText(getResources().getString(R.string.set).toUpperCase())
                     .negativeText(getResources().getString(R.string.cancel))
                     .build()
@@ -330,7 +333,7 @@ public class CephFragment extends Fragment {
         usernameTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_username);
         passwordTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_password);
 
-        if( usernameEditText.setText(getUsernameFromPreferences());
+        usernameEditText.setText(getUsernameFromPreferences());
         usernameEditText.setEnabled(true);
         passwordEditText.setText(getPasswordFromPreferences());
         passwordEditText.setEnabled(true);
@@ -342,18 +345,16 @@ public class CephFragment extends Fragment {
      */
     private int getDefaultPortFromPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        // return preferences.getInt(CephService.PORT_PREFERENCE_KEY, CephService.DEFAULT_PORT);
-        return preferences.getInt("CephPort", 7480);
+        return preferences.getInt(CephService.PORT_PREFERENCE_KEY, CephService.DEFAULT_PORT);
     }
 
     /**
      * Update port number at S3 Service is running
      */
-    private void changeCephServerPort(int port) {
+    private void setCephServerPort(int port) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         preferences.edit()
-            // .putInt(CephService.PORT_PREFERENCE_KEY, port)
-            .putInt("CephPort", port)
+            .putInt(CephService.PORT_PREFERENCE_KEY, port)
             .apply();
         updateStatus();
     }
@@ -363,8 +364,7 @@ public class CephFragment extends Fragment {
      */
     private String getUsernameFromPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        // return preferences.getString(CephService.KEY_PREFERENCE_USERNAME, CephService.DEFAULT_USERNAME);
-        return preferences.getString("ceph_username", "ceph_user");
+        return preferences.getString(CephService.KEY_PREFERENCE_USERNAME, CephService.DEFAULT_USERNAME);
     }
 
     /**
@@ -372,8 +372,9 @@ public class CephFragment extends Fragment {
      */
     private void setUsername(String username) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        //preferences.edit().putString(CephService.KEY_PREFERENCE_USERNAME, username).apply();
-        preferences.edit().putString("ceph_username", username).apply();
+        preferences.edit()
+            .putString(CephService.KEY_PREFERENCE_USERNAME, username)
+            .apply();
         updateStatus();
     }
 
@@ -383,8 +384,7 @@ public class CephFragment extends Fragment {
     private String getPasswordFromPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         try {
-            //String encryptedPassword = preferences.getString(CephService.KEY_PREFERENCE_PASSWORD, "");
-            String encryptedPassword = preferences.getString("ceph_password_encrypted", "");
+            String encryptedPassword = preferences.getString(CephService.KEY_PREFERENCE_PASSWORD, "");
             if (encryptedPassword.equals("")) {
                 return "";
             } else {
@@ -393,8 +393,7 @@ public class CephFragment extends Fragment {
         } catch (CryptException e) {
             e.printStackTrace();
             Toast.makeText(getContext(), getResources().getString(R.string.error), Toast.LENGTH_SHORT).show();
-            // preferences.edit().putString(CephService.KEY_PREFERENCE_PASSWORD, "").apply();
-            preferences.edit().putString("ceph_password_encrypted", "").apply();
+            preferences.edit().putString(CephService.KEY_PREFERENCE_PASSWORD, "").apply();
             return "";
         }
     }
@@ -405,8 +404,10 @@ public class CephFragment extends Fragment {
     private void setPassword(String password) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         try {
-            //preferences.edit().putString(CephService.KEY_PREFERENCE_PASSWORD, CryptUtil.encryptPassword(getContext(), password)).apply();
-            preferences.edit().putString("ceph_password_encrypted", CryptUtil.encryptPassword(getContext(), password)).apply();
+            preferences.edit()
+                .putString(CephService.KEY_PREFERENCE_PASSWORD, 
+                        CryptUtil.encryptPassword(getContext(), password))
+                .apply();
         } catch (CryptException e) {
             e.printStackTrace();
             Toast.makeText(getContext(), getResources().getString(R.string.error), Toast.LENGTH_LONG).show();
@@ -419,8 +420,7 @@ public class CephFragment extends Fragment {
      */
     private void setAddress(String address) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        //preferences.edit().putString(CephService.KEY_PREFERENCE_PASSWORD, CryptUtil.encryptPassword(getContext(), password)).apply();
-        preferences.edit().putString("ceph_address", address).apply();
+        preferences.edit().putString(CephService.KEY_PREFERENCE_ADDRESS, address).apply();
         Toast.makeText(getContext(), getResources().getString(R.string.ceph_address_change_success), Toast.LENGTH_LONG).show();
         updateStatus();
     }
@@ -431,8 +431,7 @@ public class CephFragment extends Fragment {
      */
     private String getDefaultAddressFromPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        //return preferences.getString(CephService.KEY_PREFERENCE_ADDRESS, CephService.DEFAULT_ADDRESS);
-        return preferences.getString("ceph_address", "");
+        return preferences.getString(CephService.KEY_PREFERENCE_ADDRESS, CephService.DEFAULT_ADDRESS);
     }
 
     /**
