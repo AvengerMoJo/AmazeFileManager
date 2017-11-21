@@ -13,10 +13,10 @@ import android.support.annotation.NonNull;
 import android.support.design.widget.TextInputLayout;
 import android.support.v4.app.Fragment;
 import android.support.v7.widget.AppCompatEditText;
-
 import android.text.Html;
 import android.text.InputType;
 import android.text.Spanned;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -65,17 +65,45 @@ import com.amazonaws.services.s3.model.Owner;
  */
 public class CephFragment extends Fragment {
 
+    static final String TAG = CephFragment.class.getSimpleName();
+
     private int accentColor;
     private TextView statusText, warningText, cephAddr, cephPort;
-    private TextView username, password;
-    private AppCompatEditText usernameEditText, passwordEditText;
-    private TextInputLayout usernameTextInput, passwordTextInput;
+    private TextView username, access, secret;
+    private AppCompatEditText usernameEditText, accessEditText, secretEditText;
+    private TextInputLayout usernameTextInput, accessTextInput, secretTextInput;
 
     private Button cephButton;
-    private ImageButton passwordButton;
+    private ImageButton accessButton, secretButton;
     private MainActivity mainActivity;
     private View rootView, startDividerView, statusDividerView;
-    private Spanned spannedStatusConnected;
+    private Spanned spannedStatusConnected, spannedStatusNotConnected;
+
+    private boolean buttonClick = false;
+
+    private BroadcastReceiver mCephReceiver = new CephReceiver();
+        /*
+    {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            updateSpans();
+            if (action.equals(CephService.ACTION_CONNECT)) {
+                cephButton.setText(getResources().getString(R.string.ceph_stop).toUpperCase());
+            } else if (action.equals(CephService.ACTION_CONNECT_FAIL)) {
+                // statusText.setText(spannedStatusNotRunning);
+                statusText.setText(spannedStatusNotConnected);
+                Toast.makeText(getContext(),
+                        getResources().getString(R.string.unknown_error),
+                        Toast.LENGTH_LONG).show();
+                cephButton.setText(getResources().getString(R.string.ceph_start).toUpperCase());
+            } else if (action.equals(CephService.ACTION_DISCONNECT)) {
+                statusText.setText(spannedStatusNotConnected);
+                cephButton.setText(getResources().getString(R.string.ceph_start).toUpperCase());
+            }
+        };
+    };
+        */
 
     private BroadcastReceiver mWifiReceiver = new BroadcastReceiver() {
 
@@ -99,6 +127,7 @@ public class CephFragment extends Fragment {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         mainActivity = (MainActivity) getActivity();
+        ((CephReceiver)mCephReceiver).setFragment(this);
     }
 
     @Override
@@ -136,14 +165,16 @@ public class CephFragment extends Fragment {
 
                 loginDialogBuilder.onPositive((dialog, which) -> {
 
-                    if (passwordEditText.getText().toString().equals("")) {
-                        passwordTextInput.setError(getResources().getString(R.string.field_empty));
+                    if (accessEditText.getText().toString().equals("")) {
+                        accessTextInput.setError(getResources().getString(R.string.field_empty));
+                    } else if (secretEditText.getText().toString().equals("")) {
+                        secretTextInput.setError(getResources().getString(R.string.field_empty));
                     } else if (usernameEditText.getText().toString().equals("")) {
                         usernameTextInput.setError(getResources().getString(R.string.field_empty));
                     } else { 
-                        // password and username field not empty, let's set them to preferences
                         setUsername(usernameEditText.getText().toString());
-                        setPassword(passwordEditText.getText().toString());
+                        setAccess(accessEditText.getText().toString());
+                        setSecret(secretEditText.getText().toString());
                     }
                 });
                 loginDialogBuilder.positiveText(getResources().getString(R.string.set).toUpperCase())
@@ -180,15 +211,16 @@ public class CephFragment extends Fragment {
         // Inflate the layout for this fragment
         rootView = inflater.inflate(R.layout.fragment_ceph, container, false);
         statusText =(TextView) rootView.findViewById(R.id.text_view_ceph_status);
-        //warningText = (TextView) rootView.findViewById(R.id.warningText);
         username = (TextView) rootView.findViewById(R.id.text_view_ceph_username);
-        password = (TextView) rootView.findViewById(R.id.text_view_ceph_password);
+        access   = (TextView) rootView.findViewById(R.id.text_view_ceph_access);
+        secret   = (TextView) rootView.findViewById(R.id.text_view_ceph_secret);
         cephPort = (TextView) rootView.findViewById(R.id.text_view_ceph_port);
         cephAddr = (TextView) rootView.findViewById(R.id.text_view_ceph_address);
         startDividerView = rootView.findViewById(R.id.divider_ceph_start);
         statusDividerView = rootView.findViewById(R.id.divider_ceph_status);     
         cephButton = (Button) rootView.findViewById(R.id.cephStartStopButton);
-        passwordButton = (ImageButton) rootView.findViewById(R.id.ceph_password_visible);
+        accessButton = (ImageButton) rootView.findViewById(R.id.ceph_access_visible);
+        secretButton = (ImageButton) rootView.findViewById(R.id.ceph_secret_visible);
 
         accentColor =  mainActivity.getColorPreference().getColor(ColorUsage.ACCENT);
 
@@ -205,19 +237,16 @@ public class CephFragment extends Fragment {
             startDividerView.setBackgroundColor(Utils.getColor(getContext(), R.color.divider_dark_card));
             statusDividerView.setBackgroundColor(Utils.getColor(getContext(), R.color.divider_dark_card));
         }
-        cephButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                /*
-                if (!CephService.isConnected()) {
-                    if (CephService.isConnectedToWifi(getContext()))
-                        connectServer();
-                    else
-                        warningText.setText(getResources().getString(R.string.ceph_no_wifi));
+        cephButton.setOnClickListener(v -> {
+            Log.d(TAG,"OnClick");
+            if (!CephService.isConnected()) {
+                if (CephService.isConnectedToWifi(getContext())) {
+                    connectServer();
                 } else {
-                    stopServer();
+                    statusText.setText(getResources().getString(R.string.ceph_no_wifi));
                 }
-                */
+            } else {
+                disconnectServer();
             }
         });
         return rootView;
@@ -251,65 +280,99 @@ public class CephFragment extends Fragment {
      * Sends a broadcast to connect to ceph server
      */
     private void connectServer() {
-        // getContext().sendBroadcast(new Intent(CephService.ACTION_CONNECT_CEPHSERVER));
+        Log.d(TAG, "connectServer():" );
+        getContext().sendBroadcast(new Intent(CephService.ACTION_CONNECT));
     }
 
     /**
-     * Sends a broadcast to stop server
+     * Sends a broadcast to disconnect to ceph server
      */
-    private void stopServer() {
+    private void disconnectServer() {
+        Log.d(TAG, "disconnectServer():" );
+        getContext().sendBroadcast(new Intent(CephService.ACTION_DISCONNECT));
     }
 
     @Override
     public void onResume() {
         super.onResume();
+        updateSpans();
         updateStatus();
+        IntentFilter cephFilter = new IntentFilter(); 
+        cephFilter.addAction(CephService.ACTION_CONNECT);
+        cephFilter.addAction(CephService.ACTION_CONNECT_FAIL);
+        cephFilter.addAction(CephService.ACTION_DISCONNECT);
+        getContext().registerReceiver(mCephReceiver, cephFilter); 
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        getContext().unregisterReceiver(mCephReceiver); 
     }
 
     /**
      * Update UI widgets based on connection status
      */
-    private void updateStatus() {
-        /*
-        if( CephService.isConnected() )
-            cephAddrText.setText(CephService.getOwnerId() + " is now connected to Ceph" );
-        else 
-            cephAddrText.setText("Not connected ..." );
-            */
-
-        statusText.setText(spannedStatusConnected);
-        cephButton.setEnabled(true);
-        cephButton.setText(getResources().getString(R.string.ceph_stop).toUpperCase());
-
-        final String passwordDecrypted = getPasswordFromPreferences();
-        final String passwordBulleted = passwordDecrypted.replaceAll(".", "\u25CF");
-        username.setText(getResources().getString(R.string.username) + ": " + getUsernameFromPreferences());
-        password.setText(getResources().getString(R.string.password) + ": " + passwordBulleted);
-
-        passwordButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
-        if (passwordDecrypted.equals("")) {
-            passwordButton.setVisibility(View.GONE);
+    public void updateStatus() {
+        if( CephService.isConnected() ) {
+            statusText.setText(spannedStatusConnected);
+            // cephAddr.setText(CephService.getOwnerId() + " is now connected to Ceph" );
+            cephButton.setText(getResources().getString(R.string.ceph_stop).toUpperCase());
         } else {
-            passwordButton.setVisibility(View.VISIBLE);
+            statusText.setText(spannedStatusNotConnected);
+            // cephAddr.setText("Not connected ..." );
+            cephButton.setText(getResources().getString(R.string.ceph_start).toUpperCase());
         }
-        passwordButton.setOnClickListener(v -> {
-            if (password.getText().toString().contains("\u25CF")) {
-                // password was not visible, let's make it visible
-                password.setText(getResources().getString(R.string.password) + ": " + passwordDecrypted);
-                passwordButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_off_grey600_24dp));
+
+        cephButton.setEnabled(true);
+
+        final String accessDecrypted = getAccessFromPreferences();
+        final String accessBulleted = accessDecrypted.replaceAll(".", "\u25CF");
+
+        final String secretDecrypted = getSecretFromPreferences();
+        final String secretBulleted = secretDecrypted.replaceAll(".", "\u25CF");
+        username.setText(getResources().getString(R.string.username) + ": " + getUsernameFromPreferences());
+        access.setText(getResources().getString(R.string.ceph_access) + ": \n" + accessBulleted);
+        secret.setText(getResources().getString(R.string.ceph_secret) + ": \n" + secretBulleted);
+
+        accessButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
+        secretButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
+        if (accessDecrypted.equals("")) {
+            accessButton.setVisibility(View.GONE);
+        } else {
+            accessButton.setVisibility(View.VISIBLE);
+        }
+        if (secretDecrypted.equals("")) {
+            secretButton.setVisibility(View.GONE);
+        } else {
+            secretButton.setVisibility(View.VISIBLE);
+        }
+        accessButton.setOnClickListener(v -> {
+            if (access.getText().toString().contains("\u25CF")) {
+                // access was not visible, let's make it visible
+                access.setText(getResources().getString(R.string.ceph_access) + ": \n" + accessDecrypted);
+                accessButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_off_grey600_24dp));
             } else {
-                // password was visible, let's hide it
-                password.setText(getResources().getString(R.string.password) + ": " + passwordBulleted);
-                passwordButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
+                // access was visible, let's hide it
+                access.setText(getResources().getString(R.string.ceph_access) + ": \n" + accessBulleted);
+                accessButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
             }
         });
+
+        secretButton.setOnClickListener(v -> {
+            if (secret.getText().toString().contains("\u25CF")) {
+                // secret was not visible, let's make it visible
+                secret.setText(getResources().getString(R.string.ceph_secret) + ": \n" + secretDecrypted);
+                secretButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_off_grey600_24dp));
+            } else {
+                // secret was visible, let's hide it
+                secret.setText(getResources().getString(R.string.ceph_secret) + ": \n" + secretBulleted);
+                secretButton.setImageDrawable(getResources().getDrawable(R.drawable.ic_eye_grey600_24dp));
+            }
+        });
+
         cephPort.setText(getResources().getString(R.string.ceph_port) + ": " + getDefaultPortFromPreferences());
-        cephAddr.setText(getResources().getString(R.string.ceph_address) + ": " + getDefaultAddressFromPreferences());
+        cephAddr.setText(getResources().getString(R.string.ceph_address) + ": \n" + getDefaultAddressFromPreferences());
     }
 
 
@@ -320,7 +383,10 @@ public class CephFragment extends Fragment {
         String statusHead = getResources().getString(R.string.ceph_status_title) + ": ";
         spannedStatusConnected = Html.fromHtml(statusHead + "<b>&nbsp;&nbsp;" +
                 "<font color='" + accentColor + "'>" + getResources().getString(R.string.ceph_status_running) + 
-                "</font></b>" + "&nbsp;<i>(" + cephAddr + ")</i>");
+                "</font></b>" + "&nbsp;<i>(" + CephService.getOwnerId() + ")</i>");
+        spannedStatusNotConnected = Html.fromHtml(statusHead + "<b>&nbsp;&nbsp;" +
+                "<font color='" + accentColor + "'>" + getResources().getString(R.string.ceph_status_not_running) + 
+                "</font></b>");
 
     }
 
@@ -329,14 +395,19 @@ public class CephFragment extends Fragment {
      */
     private void initLoginDialogViews(View loginDialogView) {
         usernameEditText = (AppCompatEditText) loginDialogView.findViewById(R.id.edit_text_dialog_ceph_username);
-        passwordEditText = (AppCompatEditText) loginDialogView.findViewById(R.id.edit_text_dialog_ceph_password);
+        accessEditText = (AppCompatEditText) loginDialogView.findViewById(R.id.edit_text_dialog_ceph_access);
+        secretEditText = (AppCompatEditText) loginDialogView.findViewById(R.id.edit_text_dialog_ceph_secret);
+
         usernameTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_username);
-        passwordTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_password);
+        accessTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_access);
+        secretTextInput = (TextInputLayout) loginDialogView.findViewById(R.id.text_input_dialog_ceph_secret);
 
         usernameEditText.setText(getUsernameFromPreferences());
         usernameEditText.setEnabled(true);
-        passwordEditText.setText(getPasswordFromPreferences());
-        passwordEditText.setEnabled(true);
+        accessEditText.setText(getAccessFromPreferences());
+        accessEditText.setEnabled(true);
+        secretEditText.setText(getSecretFromPreferences());
+        secretEditText.setEnabled(true);
     }
 
 
@@ -379,34 +450,71 @@ public class CephFragment extends Fragment {
     }
 
     /**
-     * @return deafult password for user in S3 Service
+     * @return deafult access key for user in S3 Service
      */
-    private String getPasswordFromPreferences() {
+    private String getAccessFromPreferences() {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         try {
-            String encryptedPassword = preferences.getString(CephService.KEY_PREFERENCE_PASSWORD, "");
-            if (encryptedPassword.equals("")) {
+            String encryptedAccess = preferences.getString(CephService.KEY_PREFERENCE_ACCESS, "");
+            if (encryptedAccess.equals("")) {
                 return "";
             } else {
-                return CryptUtil.decryptPassword(getContext(), encryptedPassword);
+                return CryptUtil.decryptPassword(getContext(), encryptedAccess);
             }
         } catch (CryptException e) {
             e.printStackTrace();
             Toast.makeText(getContext(), getResources().getString(R.string.error), Toast.LENGTH_SHORT).show();
-            preferences.edit().putString(CephService.KEY_PREFERENCE_PASSWORD, "").apply();
+            preferences.edit().putString(CephService.KEY_PREFERENCE_ACCESS, "").apply();
             return "";
         }
     }
 
     /**
-     * setup the user's password for S3 service 
+     * setup the access key for S3 service 
      */
-    private void setPassword(String password) {
+    private void setAccess(String access) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
         try {
             preferences.edit()
-                .putString(CephService.KEY_PREFERENCE_PASSWORD, 
-                        CryptUtil.encryptPassword(getContext(), password))
+                .putString(CephService.KEY_PREFERENCE_ACCESS, 
+                        CryptUtil.encryptPassword(getContext(), access))
+                .apply();
+        } catch (CryptException e) {
+            e.printStackTrace();
+            Toast.makeText(getContext(), getResources().getString(R.string.error), Toast.LENGTH_LONG).show();
+        }
+        updateStatus();
+    }
+
+    /**
+     * @return deafult secret key for user in S3 Service
+     */
+    private String getSecretFromPreferences() {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        try {
+            String encryptedSecret = preferences.getString(CephService.KEY_PREFERENCE_SECRET, "");
+            if (encryptedSecret.equals("")) {
+                return "";
+            } else {
+                return CryptUtil.decryptPassword(getContext(), encryptedSecret);
+            }
+        } catch (CryptException e) {
+            e.printStackTrace();
+            Toast.makeText(getContext(), getResources().getString(R.string.error), Toast.LENGTH_SHORT).show();
+            preferences.edit().putString(CephService.KEY_PREFERENCE_SECRET, "").apply();
+            return "";
+        }
+    }
+
+    /**
+     * setup the secret key for S3 service 
+     */
+    private void setSecret(String secret) {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        try {
+            preferences.edit()
+                .putString(CephService.KEY_PREFERENCE_SECRET, 
+                        CryptUtil.encryptPassword(getContext(), secret))
                 .apply();
         } catch (CryptException e) {
             e.printStackTrace();

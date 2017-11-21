@@ -20,10 +20,18 @@ import android.os.SystemClock;
 import android.preference.PreferenceManager;
 import android.util.Log;
 
+
+import com.amaze.filemanager.exceptions.CryptException;
+import com.amaze.filemanager.utils.files.CryptUtil;
+
+
 /*
 import org.apache.ftpserver.ConnectionConfigFactory;
 
 */
+import java.beans.ConstructorProperties;
+import java.beans.Transient;
+import java.nio.file.Path;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -58,6 +66,13 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 //import com.amazonaws.services.s3.model.SSEAlgorithm;
 import com.amazonaws.services.s3.model.Owner;
+//import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.S3ClientOptions;
+//import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
+//import com.amazonaws.auth.AWSStaticCredentialsProvider;
+
+
+
 import com.amazonaws.HttpMethod;
 
 
@@ -78,23 +93,17 @@ public class CephService extends Service implements Runnable {
     public static final String PORT_PREFERENCE_KEY      = "ceph_port";
     public static final String KEY_PREFERENCE_ADDRESS   = "ceph_address";
     public static final String KEY_PREFERENCE_USERNAME  = "ceph_username";
-    public static final String KEY_PREFERENCE_PASSWORD  = "ceph_password_encrypted";
+    public static final String KEY_PREFERENCE_ACCESS    = "ceph_access_encrypted";
+    public static final String KEY_PREFERENCE_SECRET    = "ceph_secret_encrypted";
     public static final String KEY_PREFERENCE_TIMEOUT   = "ceph_timeout";
     public static final String DEFAULT_ADDRESS          = "ceph://192.168.128.204";
     public static final String INITIALS_HOST_CEPH       = "ceph://";
     public static final String INITIALS_HOST_SCEPH      = "sceph://"; 
 
+    static public final String ACTION_CONNECT           = "com.amaze.filemanager.asynchronous.cephservice.CephReceiver.ACTION_CONNECT";
+    static public final String ACTION_CONNECT_FAIL      = "com.amaze.filemanager.asynchronous.cephservice.CephReceiver.CONNECT_FAIL";
+    static public final String ACTION_DISCONNECT        = "com.amaze.filemanager.asynchronous.cephservice.CephReceiver.ACTION_DISCONNECT";
 
-    public static int getDefaultPortFromPreferences(SharedPreferences preferences) {
-        try {
-            return preferences.getInt(PORT_PREFERENCE_KEY, DEFAULT_PORT);
-        } catch (ClassCastException ex) {
-            Log.e("CephService", "Default RADOS port preference is not an int. Resetting to default.");
-            changeCephServerPort(preferences, DEFAULT_PORT);
-
-            return DEFAULT_PORT;
-        }
-    }
     public interface CephConnectionListener{
         void addCeph(String name, String path, String port, String access_key, String secret_key);
     }
@@ -110,25 +119,20 @@ public class CephService extends Service implements Runnable {
     private static final String TAG = CephService.class.getSimpleName();
 
     // Service will (global) broadcast when server start/stop
-    //static public final String ACTION_STARTED = "com.amaze.filemanager.services.cephservice.CephReceiver.FTPSERVER_STARTED";
-    //static public final String ACTION_STOPPED = "com.amaze.filemanager.services.cephservice.CephReceiver.FTPSERVER_STOPPED";
-    //static public final String ACTION_FAILEDTOSTART = "com.amaze.filemanager.services.cephservice.CephReceiver.FTPSERVER_FAILEDTOSTART";
 
     // RequestStartStopReceiver listens for these actions to start/stop this server
-    //static public final String ACTION_START_FTPSERVER = "com.amaze.filemanager.services.ftpservice.FTPReceiver.ACTION_START_FTPSERVER";
-    //static public final String ACTION_STOP_FTPSERVER = "com.amaze.filemanager.services.ftpservice.FTPReceiver.ACTION_STOP_FTPSERVER";
-
-    static public final String ACTION_CONNECT_CEPHSERVER = "com.amaze.filemanager.services.cephservice.CephReceiver.ACTION_CONNECT_CEPHSERVER"; 
+    // static public final String ACTION_CONNECT_CEPHSERVER = "com.amaze.filemanager.asynchronous.cephservice.CephReceiver.ACTION_CONNECT_CEPHSERVER"; 
+    // static public final String ACTION_DISCONNECT_CEPHSERVER = "com.amaze.filemanager.asynchronous.cephservice.CephReceiver.ACTION_CONNECT_CEPHSERVER"; 
 
     private static AWSCredentials credentials = null;
     private static ClientConfiguration clientConfig = null;
     private static AmazonS3 conn = null;
 
     private static String ceph_host = null;
-    private static int port = 7480;
+    private static int ceph_port = 7480;
 
-    private String access_key = "GDI7SZ36Z7CF7PY2WZB7";
-    private String secret_key = "evHf7mG5PpOB4dQzUk7BdeEjb0FB92K3562PQrk5";
+    private String access_key = "";
+    private String secret_key = "";
 
     private static Owner me = null;
     private static List<Bucket> root_buckets = null;
@@ -140,6 +144,7 @@ public class CephService extends Service implements Runnable {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        Log.d(TAG, "onStartCommand starting");
         shouldExit = false;
         int attempts = 10;
         while (serverThread != null) {
@@ -150,13 +155,15 @@ public class CephService extends Service implements Runnable {
             }
         }
 
+        /*
         if (intent != null && intent.getStringExtra("access_key") != null && intent.getStringExtra("secret_key") != null) {
             access_key = intent.getStringExtra("access_key");
             secret_key = intent.getStringExtra("secret_key");
         }
+        */
         serverThread = new Thread(this);
         serverThread.start();
-        Log.d(TAG, "CephServerService.startCommand() started");
+        Log.d(TAG, "done");
 
         return START_STICKY;
     }
@@ -181,15 +188,59 @@ public class CephService extends Service implements Runnable {
     }
 
     // this should not need to update until multiple account setup 
-    public void setupS3() { 
+    public boolean setupS3() { 
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
         //System.setProperty(SDKGlobalConfiguration.ENABLE_S3_SIGV4_SYSTEM_PROPERTY, "true");
-        credentials = new BasicAWSCredentials(access_key, secret_key);
-        clientConfig = new ClientConfiguration();
-        clientConfig.setProtocol(Protocol.HTTP);
-        //clientConfig.setSignerOverride("S3SignerType");
-        ceph_host = "ceph://avengermojo.ddns.net";
-        port = getDefaultPortFromPreferences(preferences);
+        try {
+            access_key = preferences.getString(KEY_PREFERENCE_ACCESS, "Empty");
+            secret_key = preferences.getString(KEY_PREFERENCE_SECRET, "Empty");
+
+            if(access_key.equals("Empty") || secret_key.equals("Empty")) {
+                Log.d(TAG, "setupS3 access or secret empty key");
+                return false;
+            } else {
+                access_key = CryptUtil.decryptPassword(this, access_key);
+                secret_key = CryptUtil.decryptPassword(this, secret_key);
+            }
+            
+            ceph_host = preferences.getString(KEY_PREFERENCE_ADDRESS, "Empty");
+            if(ceph_host.equals("Empty")) {
+                Log.d(TAG, "setupS3 address empty");
+                return false;
+            }
+            ceph_port = preferences.getInt(PORT_PREFERENCE_KEY, DEFAULT_PORT);
+        } catch (CryptException e) {
+            Log.e(TAG, "Crypt....");
+        } catch (ClassCastException ex) {
+            Log.e(TAG, "Preference error....");
+            return false;
+        }
+
+        Log.d(TAG, "Access Key:" + access_key);
+        Log.d(TAG, "Secret Key:" + secret_key);
+        Log.d(TAG, "Host :" + ceph_host);
+        Log.d(TAG, "Port :" + ceph_port);
+        // System.out.println(com.fasterxml.jackson.databind.ObjectMapper.class.getProtectionDomain().getCodeSource().getLocation());
+        try {
+            credentials = new BasicAWSCredentials(access_key, secret_key);
+            clientConfig = new ClientConfiguration();
+            if(clientConfig != null ) { 
+                clientConfig.setSignerOverride("S3SignerType");
+                Log.d(TAG, "setting the S3SignerType");
+                clientConfig.setProtocol(Protocol.HTTP);
+                Log.d(TAG, "setting the EndPoint->"+ getRoot());
+                clientConfig.setProxyHost(getRoot());
+                Log.d(TAG, "setting the EndPointPort->"+ getPort());
+                clientConfig.setProxyPort(getPort());
+            } else { 
+                return false;
+            }
+            // Class<?> cls = Class.forName("com.fasterxml.jackson.databind.ext.Java7SupportImpl");
+        } catch ( Exception e ) { 
+            Log.d(TAG, "Connection Failed:" + e);
+            return false;
+        }
+        return true;
     }
     public void connectCephServer() { 
         Log.d(TAG, "Ceph connectCephServer");
@@ -202,39 +253,64 @@ public class CephService extends Service implements Runnable {
             Log.d(TAG, " I am not empty ... should I be reconnecting?");
             conn = null;
         }
+        try{
         // Another way to setup client 
         //conn = new AmazonS3Client(credentials);
         // AmazonS3 s3Client = AmazonS3ClientBuilder.standard().withCredentials(new AWSStaticCredentialsProvider(awsCreds)).build();
         conn = new AmazonS3Client(credentials, clientConfig);  // for http 
-        conn.setEndpoint( getEndPoint() );
+        conn.setEndpoint(getEndPoint());
+        // conn = new AmazonS3ClientBuilder.standard() 
+        // .withCredentials(new  AWSStaticCredentialsProvider(credentials))
+        // .withClientConfiguration(clientConfig)
+        // .withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(getEndPoint(), "Multi-Regional")).build();
+
+        //S3ClientOptions options = new S3ClientOptions();
+        //options.setPathStyleAccess(true);
+        //conn.setS3ClientOptions(options);
+        conn.setS3ClientOptions(S3ClientOptions.builder().setPathStyleAccess(true).build());
+        } catch (Exception e){
+            Log.d(TAG, "Error fail connectCephServer");
+        }
     }
 
     @Override
     public void run() {
-        Log.d(TAG, "CephServerService.run() started");
-        setupS3(); 
-        //ceph_host = ceph_host.toLowerCase();
-        //if( ceph_host.startsWith( "ceph://" ) ) { 
-            //String ceph_host_endpoint  = ceph_host.replaceFirst("^ceph://", "");
-            //conn.setEndpoint(ceph_host_endpoint + ":" + port);
-            //System.out.println("Connecting to Server : " + ceph_host_endpoint + ":" + port);
-        //}
-        connectCephServer(); 
-        me =  conn.getS3AccountOwner(); 
-        if( me != null ) {
-            System.out.println("Owner :" + me.toString() );
-            if( cephConnectionListener != null ) { 
-                //String s_port = new String(port);
-                cephConnectionListener.addCeph( me.getId(), ceph_host, String.valueOf(port), access_key, secret_key);
+        Log.d(TAG, "run() started");
+        if( setupS3() ) { 
+            //ceph_host = ceph_host.toLowerCase();
+            //if( ceph_host.startsWith( "ceph://" ) ) { 
+                //String ceph_host_endpoint  = ceph_host.replaceFirst("^ceph://", "");
+                //conn.setEndpoint(ceph_host_endpoint + ":" + port);
+                //System.out.println("Connecting to Server : " + ceph_host_endpoint + ":" + port);
+            //}
+            connectCephServer(); 
+            try {
+                me =  conn.getS3AccountOwner(); 
+                if( me != null ) {
+                    Log.d(TAG, "Owner : " + me.toString());
+                    if( cephConnectionListener != null ) { 
+                        //String s_port = new String(port);
+                        //cephConnectionListener.addCeph( me.getId(), ceph_host,
+                                //String.valueOf(ceph_port), access_key, secret_key);
+                    }
+                }
+            } catch( Exception e){
+                Log.d(TAG, "getOwner : Error " + e);
             }
+
+            /*
+            for (Bucket bucket : getRootBucket() ) {
+                if(bucket != null ) { 
+                    System.out.println("CEPH Bucket list " + bucket.getName() + "\t" +
+                            StringUtils.fromDate(bucket.getCreationDate()));
+                }
+            } 
+            */
+            //sendBroadcast(new Intent(CephService.ACTION_STARTED));
+            //sendBroadcast(new Intent(CephService.ACTION_FAILEDTOSTART));
+            printRootBucket();
+            Log.d(TAG, "start Done()");
         }
-        for (Bucket bucket : getRootBucket() ) {
-            System.out.println("CEPH Bucket list " + bucket.getName() + "\t" +
-                    StringUtils.fromDate(bucket.getCreationDate()));
-        } 
-        
-        //sendBroadcast(new Intent(CephService.ACTION_STARTED));
-        //sendBroadcast(new Intent(CephService.ACTION_FAILEDTOSTART));
     }
 
     @Override
@@ -295,10 +371,12 @@ public class CephService extends Service implements Runnable {
     }
 
     public static int getPort() {
-        return port;
+        Log.d(TAG, "getPort ->" + ceph_port); 
+        return ceph_port;
     }
 
     public static String getRoot() { 
+        Log.d(TAG, "getRoot ->" + ceph_host ); 
         return ceph_host;
     }
 
@@ -308,7 +386,7 @@ public class CephService extends Service implements Runnable {
 
     public static String getEndPoint() {
         String endpoint  = ceph_host.replaceFirst("^ceph://", "");
-        endpoint += ":" + port; 
+        endpoint += ":" + ceph_port; 
         Log.d(TAG, "getEndPoint ->" + endpoint ); 
         return endpoint; 
     }
@@ -320,15 +398,23 @@ public class CephService extends Service implements Runnable {
             return "Unknown"; 
     }
 
-    public static List<Bucket> getRootBucket() { 
-        if( root_buckets != null ) {
-            return root_buckets;
-        }
+    //public static List<Bucket> getRootBucket() { 
+    public void printRootBucket() { 
+        Log.d(TAG, "getRootBucket->" ); 
         if( conn != null ) { 
-            root_buckets = conn.listBuckets();
-            return root_buckets;
+            try {
+                Log.d(TAG, "listBuckets->" ); 
+                root_buckets = conn.listBuckets();
+                for(Bucket bucket : root_buckets){
+                    if(bucket != null ) { 
+                        System.out.println("CEPH Bucket list " + bucket.getName() + "\t" +
+                                StringUtils.fromDate(bucket.getCreationDate()));
+                    }
+                } 
+            } catch (Exception e){
+                Log.d(TAG, "Fail to get Root:" + e); 
+            }
         }
-        return null;
     }
 
     public static List<S3ObjectSummary> getObjectsListSummary() { 

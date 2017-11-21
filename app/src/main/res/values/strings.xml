@@ -314,6 +314,8 @@
     <string name="ceph_port_edit_menu_title">Ceph port</string>
     <string name="ceph_port">Port</string>
     <string name="ceph_address_hint">IP or Hostname</string>
+    <string name="ceph_access">Access</string>
+    <string name="ceph_secret">Secret</string>
 
     <string name="start_ftp">Start</string>
     <string name="stop_ftp">Stop</string>
