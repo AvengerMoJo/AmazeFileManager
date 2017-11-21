@@ -124,6 +124,10 @@ dependencies {
     compile 'com.github.PhilJay:MPAndroidChart:v3.0.2'//Nice charts and graphs
 
     compile 'com.github.npgall:concurrent-trees:2.6.1'//Concurrent tries
+
+    compile 'com.amazonaws:aws-android-sdk-core:2.2.+'
+    compile 'com.amazonaws:aws-android-sdk-s3:2.2.+'
+    compile 'com.amazonaws:aws-android-sdk-ddb:2.2.+'
 }
 
 def Properties props = new Properties()
