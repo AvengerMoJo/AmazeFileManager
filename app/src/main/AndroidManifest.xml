@@ -200,6 +200,20 @@
         </receiver>
 
         <receiver
+            android:name="com.amaze.filemanager.asynchronous.cephservice.CephReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.amaze.filemanager.services.cephservice.CephReceiver.ACTION_CONNECT" />
+                <action android:name="com.amaze.filemanager.services.cephservice.CephReceiver.ACTION_DISCONNECT" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name="com.amaze.filemanager.asynchronous.cephservice.CephService"
+            android:enabled="true"
+            android:exported="true" />
+
+        <receiver
             android:name="com.amaze.filemanager.ui.notifications.FTPNotification"
             android:exported="true">
             <intent-filter>
@@ -217,6 +231,11 @@
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths"/>
+            <!--
+            <meta-data
+                android:name="android.security.net.config"
+                android:resource="@xml/network_security_config"/>
+                -->
         </provider>
     </application>
 
