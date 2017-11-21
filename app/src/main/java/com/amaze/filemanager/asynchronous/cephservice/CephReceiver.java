@@ -7,31 +7,41 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.util.Log;
+import com.amaze.filemanager.fragments.CephFragment;
 
 public class CephReceiver extends BroadcastReceiver {
 
     static final String TAG = CephReceiver.class.getSimpleName();
+    static CephFragment myFragment = null;
 
     @Override
     public void onReceive(Context context, Intent intent) {
         Log.d(TAG, "Received: " + intent.getAction());
 
         try {
-            if (intent.getAction().equals(CephService.ACTION_CONNECT_CEPHSERVER)) {
+            if (intent.getAction().equals(CephService.ACTION_CONNECT)) {
                 Intent serverService = new Intent(context, CephService.class);
                 if (!CephService.isConnected()) {
                     Log.d(TAG, "Connecting : " );
                     context.startService(serverService);
                 }
+                myFragment.updateStatus();
+            } else if (intent.getAction().equals(CephService.ACTION_DISCONNECT)) {
+                Intent serverService = new Intent(context, CephService.class);
+                if (CephService.isConnected()) {
+                    Log.d(TAG, "Disconnecting : " );
+                    context.stopService(serverService);
+                }
+                myFragment.updateStatus();
             }
-           /* else if (intent.getAction().equals(FTPService.ACTION_STOP_FTPSERVER)) {
-                Intent serverService = new Intent(context, FTPService.class);
-                context.stopService(serverService);
-            }
-            */
         } catch (Exception e) {
             Log.e(TAG, "Failed to connect to ceph on intent " + e.getMessage());
         }
+    }
+
+    public void setFragment(CephFragment fragment) {
+        Log.d(TAG, "Setting Fragment");
+        myFragment = fragment; 
     }
 
 
